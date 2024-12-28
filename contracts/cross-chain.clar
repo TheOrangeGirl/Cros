@@ -42,12 +42,18 @@
 (define-private (check-processed (tx-id (buff 32)))
  (default-to false (map-get? processed-txs tx-id)))
 
+(define-private (validate-recipient (recipient principal))
+  (and 
+    (not (is-eq recipient tx-sender))
+    (not (is-eq recipient (var-get contract-owner)))))
+
 (define-private (validate-bridge-data (tx-id (buff 32)) (amount uint) (recipient principal))
  (let ((sender tx-sender))
    (asserts! (not (var-get is-paused)) ERR_PAUSED)
    (asserts! (is-valid-amount amount) ERR_INVALID_AMOUNT) 
    (asserts! (>= (get-balance sender) amount) ERR_INSUFFICIENT_BALANCE)
    (asserts! (not (check-processed tx-id)) ERR_INVALID_TX)
+   (asserts! (validate-recipient recipient) ERR_INVALID_RECIPIENT)
    (ok true)))
 
 ;; Public Functions
@@ -55,6 +61,7 @@
  (begin
    (asserts! (is-valid-amount amount) ERR_INVALID_AMOUNT)
    (asserts! (> (len tx-id) u0) ERR_INVALID_TX_ID)
+   (asserts! (validate-recipient recipient) ERR_INVALID_RECIPIENT)
    (let ((validated (try! (validate-bridge-data tx-id amount recipient))))
      (map-set processed-txs tx-id true)
      (ok (map-set bridge-requests 
@@ -66,6 +73,7 @@
    (asserts! (is-contract-owner) ERR_UNAUTHORIZED)
    (asserts! (is-valid-amount amount) ERR_INVALID_AMOUNT)
    (asserts! (> (len tx-id) u0) ERR_INVALID_TX_ID)
+   (asserts! (validate-recipient recipient) ERR_INVALID_RECIPIENT)
    (match (map-get? bridge-requests 
            { tx-id: tx-id, amount: amount, recipient: recipient })
      request (begin
@@ -97,6 +105,14 @@
      (as-contract (stx-transfer? claim-amount tx-sender tx-sender)))
    ERR_INVALID_OPERATION))
 
+(define-public (emergency-withdraw (amount uint))
+  (begin
+    (asserts! (is-contract-owner) ERR_UNAUTHORIZED)
+    (asserts! (var-get is-paused) ERR_INVALID_OPERATION)
+    (asserts! (is-valid-amount amount) ERR_INVALID_AMOUNT)
+    (try! (as-contract (stx-transfer? amount tx-sender (var-get contract-owner))))
+    (ok true)))
+
 (define-public (record-bridge-stats (amount uint))
   (begin
     (asserts! (is-valid-amount amount) ERR_INVALID_AMOUNT)
@@ -108,15 +124,22 @@
     (map-set daily-bridge-volume (/ block-height u144) (+ current-day-total amount))
     (ok true))))
 
-(define-read-only (get-user-bridge-stats (user principal))
-  (let (
-    (total-bridged (default-to u0 (map-get? total-bridged-by-user user)))
-    (pending-claims (default-to u0 (map-get? claims user))))
-  {
-    total-bridged: total-bridged,
-    pending-claims: pending-claims,
-    is-active: (> total-bridged u0)
-  }))
+(define-public (batch-process-claims (users (list 200 principal)))
+  (begin
+    (asserts! (is-contract-owner) ERR_UNAUTHORIZED)
+    (let ((processed-count u0))
+      (fold process-user users (ok processed-count)))))
+
+(define-private (process-user (user principal) (previous-result (response uint uint)))
+  (match previous-result
+    success (match (map-get? claims user)
+              claim-amount (begin
+                (map-delete claims user)
+                (match (as-contract (stx-transfer? claim-amount tx-sender user))
+                  transfer-success (ok (+ success u1))
+                  transfer-error previous-result))
+              (ok success))
+    error previous-result))
 
 ;; Read-only Functions
 (define-read-only (get-balance (user principal))
@@ -127,6 +150,19 @@
 
 (define-read-only (get-minimum-amount)
  (var-get min-amount))
+
+(define-read-only (get-user-bridge-stats (user principal))
+  (let (
+    (total-bridged (default-to u0 (map-get? total-bridged-by-user user)))
+    (pending-claims (default-to u0 (map-get? claims user))))
+  {
+    total-bridged: total-bridged,
+    pending-claims: pending-claims,
+    is-active: (> total-bridged u0)
+  }))
+
+(define-read-only (get-daily-bridge-volume (day uint))
+  (default-to u0 (map-get? daily-bridge-volume day)))
 
 ;; Admin Functions  
 (define-public (set-paused (paused bool))
