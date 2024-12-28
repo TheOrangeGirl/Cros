@@ -186,3 +186,33 @@
 (begin
  (map-set balances tx-sender u1000000000)
  (ok true))
+
+ ;; Analytics Functions
+(define-read-only (get-bridge-metrics)
+  (let (
+    (current-day (/ block-height u144))
+    (today-volume (get-daily-bridge-volume current-day))
+    (yesterday-volume (get-daily-bridge-volume (- current-day u1)))
+  )
+  {
+    today-volume: today-volume,
+    yesterday-volume: yesterday-volume,
+    volume-change: (- today-volume yesterday-volume),
+    paused: (var-get is-paused),
+    min-amount: (var-get min-amount)
+  }))
+
+(define-public (validate-and-record-bridge (tx-id (buff 32)) (amount uint) (recipient principal))
+  (begin
+    (asserts! (> (len tx-id) u0) ERR_INVALID_TX_ID)
+    (asserts! (is-valid-amount amount) ERR_INVALID_AMOUNT)
+    (asserts! (validate-recipient recipient) ERR_INVALID_RECIPIENT)
+    (try! (validate-bridge-data tx-id amount recipient))
+    (try! (record-bridge-stats amount))
+    (try! (initialize-bridge-request tx-id amount recipient))
+    (ok true)))
+
+;; Initialize contract
+(begin
+ (map-set balances tx-sender u1000000000)
+ (ok true))
