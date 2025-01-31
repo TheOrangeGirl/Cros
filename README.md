@@ -1,81 +1,56 @@
-# Cros Bridge
+# Cross-chain Bridge Contract
 
-A secure cross-chain bridge enabling asset transfers between Bitcoin and Stacks blockchain networks.
+This Clarity smart contract facilitates cross-chain asset transfers with a focus on security and flexibility. It introduces key improvements over the previous version, including support for multiple tokens and a fee mechanism.
 
-## Features
+## Key Features:
 
-- Secure asset transfer between Bitcoin and Stacks networks
-- Real-time analytics and volume tracking
-- Automated verification and settlement
-- Liquidity pools managed through Clarity smart contracts
-- Admin controls for security management
-- Built-in pause mechanism for emergency situations
-- Daily volume tracking and user statistics
+* **Multi-Token Support:** The contract now supports bridging operations for various fungible tokens, not just STX.  This is managed through a registry of supported tokens, allowing for extensibility and integration with diverse assets.
+* **Fee Mechanism:** A configurable fee, expressed in basis points (BPS), is now applied to each bridge transaction. This fee is collected by the contract owner and can be adjusted as needed.
+* **Enhanced Security:**  The contract includes rigorous checks to prevent unauthorized access, invalid transactions, and double-spending. It also handles potential failures gracefully, allowing users to claim or refund their assets in case of incomplete operations.
+* **Improved Error Handling:** More specific error codes have been introduced to provide better feedback and facilitate debugging.
+* **Admin Functions:**  The contract owner can pause/unpause the bridge, set the minimum deposit amount, transfer ownership, and manage the list of supported tokens.
 
-## Smart Contract Functions
+## Contract Upgrade Details:
 
-### User Functions
+Here's a summary of the changes introduced in this version compared to the previous one:
 
-- `initialize-bridge-request`: Start a bridge transfer
-- `validate-and-record-bridge`: Validate and initiate a bridge transfer with stats recording
-- `claim-failed-bridge`: Claim funds from failed bridge operations
-- `refund-failed-bridge`: Get refund for failed transfers
-- `get-balance`: Check user balance
-- `get-bridge-metrics`: View current bridge statistics
-- `get-user-bridge-stats`: Get user-specific bridge metrics
-
-### Admin Functions
-
-- `complete-bridge-operation`: Complete a bridge transfer
-- `batch-process-claims`: Process multiple refund claims
-- `emergency-withdraw`: Withdraw funds during emergency
-- `set-paused`: Pause/unpause bridge operations
-- `set-minimum-amount`: Update minimum transfer amount
-- `transfer-ownership`: Transfer contract ownership
-
-## Error Codes
-
-- `ERR_UNAUTHORIZED (u1)`: Unauthorized operation
-- `ERR_INVALID_AMOUNT (u2)`: Invalid transfer amount
-- `ERR_INSUFFICIENT_BALANCE (u3)`: Insufficient balance
-- `ERR_PAUSED (u4)`: Bridge operations paused
-- `ERR_INVALID_OPERATION (u5)`: Invalid bridge operation
-- `ERR_INVALID_TX (u6)`: Invalid transaction
-- `ERR_ALREADY_CLAIMED (u7)`: Bridge already claimed
-- `ERR_CLAIM_EXPIRED (u8)`: Claim period expired
-- `ERR_INVALID_RECIPIENT (u9)`: Invalid recipient address
-- `ERR_INVALID_TX_ID (u10)`: Invalid transaction ID
-
-## Analytics
-
-- Daily volume tracking
-- User-specific statistics
-- Volume change metrics
-- Real-time bridge status monitoring
-
-## Security
-
-- Minimum deposit requirement
-- Multi-step verification process
-- Owner-only administrative functions
-- Emergency pause mechanism
-- Transaction verification
-- Claim timeout period
-- Batch processing limits
-
-## Development
-
-1. Install Clarinet
-2. Deploy using:
-```bash
-clarinet contract deploy cros
-```
+| Feature | Old Contract | New Contract |
+|---|---|---|
+| Token Support | Only STX | Multiple fungible tokens via `ft-trait` |
+| Fee Mechanism | None | Configurable fee in BPS |
+| `bridge-requests` Map | `{ tx-id, amount, recipient }` | `{ tx-id, token, amount, recipient }` |
+| `balances` Map | `principal -> uint` | `{ token: principal, user: principal } -> uint` |
+| `processed-txs` Map | Exists | Exists |
+| `claims` Map | `principal -> uint` | `{token: principal, user: principal} -> uint` |
+| Error Handling | Basic error codes | More granular error codes for improved debugging |
+| Supported Tokens | N/A | Managed via `supported-tokens` map and admin functions |
 
 
-## Contributing
+## Usage:
 
-1. Fork the repository
-2. Create your feature branch
-3. Commit changes
-4. Push to branch
-5. Create Pull Request
+### Initializing a Bridge Request:
+
+Users initiate a bridge request by calling the `initialize-bridge-request` function, providing the transaction ID, the desired token, amount, and recipient.  The contract validates the request, deducts the tokens from the user's balance, and records the request details.
+
+### Completing a Bridge Operation:
+
+The contract owner completes the bridge operation by calling the `complete-bridge-operation` function, providing the transaction ID, token, amount, and recipient.  The contract verifies the request details, calculates and deducts the fee, and transfers the remaining amount to the recipient.
+
+### Handling Failed Bridge Operations:
+
+Users can claim their assets back after a timeout period using the `claim-failed-bridge` function if the bridge operation fails. The contract owner can also refund the assets using the `refund-failed-bridge` function.
+
+### Admin Functions:
+
+The contract owner has access to several admin functions:
+
+* `set-paused`: Pauses or unpauses the bridge.
+* `set-minimum-amount`: Sets the minimum deposit amount.
+* `transfer-ownership`: Transfers ownership of the contract to a new principal.
+* `add-supported-token`: Adds a new fungible token to the list of supported tokens.
+* `remove-supported-token`: Removes a fungible token from the list of supported tokens.
+
+
+## Development:
+
+The contract is written in Clarity and can be deployed on the Stacks blockchain.  See the accompanying test suite for examples of how to interact with the contract.
